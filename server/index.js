@@ -11,6 +11,8 @@ import { fileURLToPath } from 'node:url';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const projectRoot = resolve(here, '..');
+const HARD_CODED_ADMIN_EMAIL = 'admin@yit';
+const HARD_CODED_ADMIN_PASSWORD = '123@231';
 const distPath = resolve(projectRoot, 'dist');
 const port = Number(process.env.PORT || 4174);
 const host = process.env.HOST || '127.0.0.1';
@@ -187,6 +189,21 @@ function verifyPassword(password) {
 }
 
 app.post('/api/admin/session', loginLimiter, (req, res) => {
+  const email = cleanText(req.body?.email, 254).toLowerCase();
+  const password = String(req.body?.password || '');
+  // Use hard‑coded credentials if environment variables are not set
+  const expectedEmail = process.env.ADMIN_EMAIL ? String(process.env.ADMIN_EMAIL).toLowerCase() : HARD_CODED_ADMIN_EMAIL.toLowerCase();
+  const plainPassword = process.env.ADMIN_PASSWORD || HARD_CODED_ADMIN_PASSWORD;
+  const passwordOk = plainPassword ? password === plainPassword : verifyPassword(password);
+  if (!expectedEmail || email !== expectedEmail || !passwordOk) {
+    return res.status(401).json({ error: 'Email or password is incorrect.' });
+  }
+  const token = randomBytes(32).toString('base64url');
+  const expiresAt = Date.now() + 8 * 60 * 60 * 1000;
+  db.prepare('INSERT INTO admin_sessions (token_hash, email, expires_at) VALUES (?, ?, ?)').run(tokenDigest(token), expectedEmail, expiresAt);
+  res.cookie('inuguration_admin', token, { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'strict', maxAge: 8 * 60 * 60 * 1000, path: '/' });
+  res.json({ ok: true, email: expectedEmail, expiresAt });
+});
   const email = cleanText(req.body?.email, 254).toLowerCase();
   const expectedEmail = String(process.env.ADMIN_EMAIL || '').toLowerCase();
   if (!expectedEmail || !hashConfig() || email !== expectedEmail || !verifyPassword(String(req.body?.password || '')))
