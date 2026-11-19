@@ -5,3 +5,14 @@ data/
 *.sqlite
 *.sqlite-shm
 *.sqlite-wal
+
+.vercel
+service_account.json
+dist/
+.env
+data/
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+
+.vercel
