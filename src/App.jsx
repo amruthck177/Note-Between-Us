@@ -5,6 +5,10 @@ import {
   FileUp, Filter, GraduationCap, LayoutDashboard, LogOut, Menu, Moon, MoreHorizontal, Pencil,
   Plus, Search, Settings, ShieldCheck, SlidersHorizontal, Sun, Trash2, Upload, Users, X,
 } from 'lucide-react';
+import { useRecognition } from './recognition/useRecognition.js';
+import RecognitionBanner from './recognition/RecognitionBanner.jsx';
+import RecognitionCelebration from './recognition/RecognitionCelebration.jsx';
+import './recognition/recognition.css';
 
 const NAV = [
   { id: 'overview', label: 'Overview', icon: LayoutDashboard },
@@ -66,25 +70,30 @@ function Field({ label, error, optional, children, hint }) {
   return <label className="field"><span className="field-label">{label}{optional && <em>Optional</em>}</span>{children}{hint && <small className="field-hint">{hint}</small>}{error && <small className="field-error">{error}</small>}</label>;
 }
 
-function StudentPanel({ navigate, dark, toggleTheme }) {
+function StudentPanel({ navigate, dark, toggleTheme, onNameChange, onNameImmediate }) {
   const [data, setData] = useState({ name: '', usn: '', dob: '', questionsSenior: '', adviceJunior: '', website: '' });
   const [step, setStep] = useState('form');
   const [errors, setErrors] = useState({});
   const [busy, setBusy] = useState(false);
   const info = batchInfo(data.usn);
-  const update = (key, value) => { setData((prev) => ({ ...prev, [key]: value })); setErrors((prev) => ({ ...prev, [key]: '' })); };
+  const update = (key, value) => {
+    setData((prev) => ({ ...prev, [key]: value }));
+    setErrors((prev) => ({ ...prev, [key]: '' }));
+    if (key === 'name') onNameChange?.(value);
+  };
   const submit = async () => {
     setBusy(true); setErrors({});
+    onNameImmediate?.(data.name);
     try { await api('/api/submissions', { method: 'POST', body: JSON.stringify(data) }); setStep('success'); }
     catch (error) { if (error.fields) { setErrors(error.fields); setStep('form'); } else setErrors({ submit: error.message }); }
     finally { setBusy(false); }
   };
-  if (step === 'success') return <div className="student-shell"><StudentHeader dark={dark} toggleTheme={toggleTheme} navigate={navigate} /><main className="success-wrap"><div className="success-card"><div className="success-icon"><Check size={28} /></div><p className="eyebrow">Submission received</p><h1>Thank you, {data.name.split(' ')[0]}.</h1><p>Your information has been saved. Your batch and semester are recorded as <b>{info?.batch} · {info?.semester}{info?.semester === 3 ? 'rd' : 'th'} semester</b>.</p><div className="success-ref"><span>USN</span><strong>{data.usn.toUpperCase()}</strong></div><button className="btn btn-outline btn-wide" onClick={() => { setData({ name: '', usn: '', dob: '', questionsSenior: '', adviceJunior: '', website: '' }); setStep('form'); }}>Return to student form <ArrowRight size={16} /></button></div></main><Footer /></div>;
+  if (step === 'success') return <div className="student-shell"><StudentHeader dark={dark} toggleTheme={toggleTheme} navigate={navigate} /><main className="success-wrap"><div className="success-card"><div className="success-icon"><Check size={28} /></div><p className="eyebrow">Submission received</p><h1>Thank you, {data.name.split(' ')[0]}.</h1><p>Your information has been saved. Your batch and semester are recorded as <b>{info?.batch} · {info?.semester}{info?.semester === 3 ? 'rd' : 'th'} semester</b>.</p><div className="success-ref"><span>USN</span><strong>{data.usn.toUpperCase()}</strong></div><button className="btn btn-outline btn-wide" onClick={() => { setData({ name: '', usn: '', dob: '', questionsSenior: '', adviceJunior: '', website: '' }); setStep('form'); onNameImmediate?.('', { immediate: true }); }}>Return to student form <ArrowRight size={16} /></button></div></main><Footer /></div>;
   return <div className="student-shell">
     <StudentHeader dark={dark} toggleTheme={toggleTheme} navigate={navigate} secure />
     <main className="student-main"><div className="student-intro"><span className="eyebrow"><span className="eyebrow-dot" /> Student portal</span><h1>Welcome to<br /><span>Notes Between Us</span></h1><p>Every question starts a conversation. Every piece of advice makes a difference.</p><div className="semester-note"><BookOpen size={17} /><span>Your batch and semester are automatically identified from your USN.</span></div></div>
       <section className="form-card"><div className="form-head"><div><span className="step-label">YOUR DETAILS</span><h2>Student information</h2></div><span className="step-count">01 <i>/</i> 02</span></div>
-        <div className="form-grid"><Field label="Full name" error={errors.name}><input value={data.name} onChange={(e) => update('name', e.target.value)} placeholder="Enter your name" autoComplete="name" maxLength={100} /></Field>
+        <div className="form-grid"><Field label="Full name" error={errors.name}><input value={data.name} onChange={(e) => update('name', e.target.value)} onBlur={() => onNameImmediate?.(data.name)} onKeyDown={(e) => { if (e.key === 'Enter') onNameImmediate?.(data.name); }} placeholder="Enter your name" autoComplete="name" maxLength={100} /></Field>
           <Field label="USN" error={errors.usn} hint="Example: 4DM24AI001"><input className="usn-input" value={data.usn} onChange={(e) => update('usn', e.target.value.toUpperCase())} placeholder="4DM24AI001" autoCapitalize="characters" maxLength={11} /></Field>
           <Field label="Date of birth" error={errors.dob}><input type="date" value={data.dob} max={latestValidDob()} onChange={(e) => update('dob', e.target.value)} /></Field>
           <div className={`batch-detect ${info ? 'detected' : ''}`}><div className="detect-icon"><GraduationCap size={19} /></div><div><span>YOUR BATCH &amp; SEMESTER</span><strong>{info ? `${info.batch} Batch · ${info.semester}${info.semester === 3 ? 'rd' : 'th'} Semester` : 'Enter a valid USN to detect'}</strong></div><span className="detect-check">{info && <Check size={15} />}</span></div>
@@ -94,7 +103,7 @@ function StudentPanel({ navigate, dark, toggleTheme }) {
         {info?.batch === '2025' && <div className="conversation-fields"><Field label="Questions / Messages to Seniors" error={errors.questionsSenior}><textarea rows="4" maxLength={2000} value={data.questionsSenior} onChange={(e) => update('questionsSenior', e.target.value)} placeholder="What would you like to ask your seniors?" /></Field><p className="form-footnote"><CircleHelp size={15} /> Your question will be shared with the senior batches.</p></div>}
         <input className="honeypot" tabIndex="-1" autoComplete="off" aria-hidden="true" value={data.website} onChange={(e) => update('website', e.target.value)} />
         {errors.submit && <div className="error-banner">{errors.submit}</div>}
-        <div className="form-actions"><span><ShieldCheck size={15} /> Your details are only used for this student interaction.</span><button className="btn btn-primary" disabled={!info || busy} onClick={() => { const e = {}; if (data.name.trim().length < 2) e.name = 'Enter your full name.'; if (!info) e.usn = 'Enter a valid USN to continue.'; if (!data.dob || data.dob > latestValidDob()) e.dob = 'Enter a valid date of birth.'; if (info?.batch === '2023' && !data.adviceJunior.trim()) e.adviceJunior = 'Add a message for juniors.'; if (info?.batch === '2024' && !data.questionsSenior.trim()) e.questionsSenior = 'Add a question for your seniors.'; if (info?.batch === '2024' && !data.adviceJunior.trim()) e.adviceJunior = 'Add a message for juniors.'; if (info?.batch === '2025' && !data.questionsSenior.trim()) e.questionsSenior = 'Add a question for your seniors.'; setErrors(e); if (!Object.keys(e).length) setStep('review'); }}>Review details <ArrowRight size={16} /></button></div>
+        <div className="form-actions"><span><ShieldCheck size={15} /> Your details are only used for this student interaction.</span><button className="btn btn-primary" disabled={!info || busy} onClick={() => { onNameImmediate?.(data.name); const e = {}; if (data.name.trim().length < 2) e.name = 'Enter your full name.'; if (!info) e.usn = 'Enter a valid USN to continue.'; if (!data.dob || data.dob > latestValidDob()) e.dob = 'Enter a valid date of birth.'; if (info?.batch === '2023' && !data.adviceJunior.trim()) e.adviceJunior = 'Add a message for juniors.'; if (info?.batch === '2024' && !data.questionsSenior.trim()) e.questionsSenior = 'Add a question for your seniors.'; if (info?.batch === '2024' && !data.adviceJunior.trim()) e.adviceJunior = 'Add a message for juniors.'; if (info?.batch === '2025' && !data.questionsSenior.trim()) e.questionsSenior = 'Add a question for your seniors.'; setErrors(e); if (!Object.keys(e).length) setStep('review'); }}>Review details <ArrowRight size={16} /></button></div>
       </section>
       <p className="student-privacy"><span><ShieldCheck size={14} /></span> Your submission is saved securely and cannot be changed after submitting. If you need a correction, contact an administrator.</p>
     </main><Footer />
@@ -111,7 +120,7 @@ function Modal({ title, children, close, wide = false }) {
 function AdminLogin({ navigate, dark, toggleTheme }) {
   const [email, setEmail] = useState(''); const [password, setPassword] = useState(''); const [error, setError] = useState(''); const [busy, setBusy] = useState(false);
   const signIn = async (e) => { e.preventDefault(); setBusy(true); setError(''); try { await api('/api/admin/session', { method: 'POST', body: JSON.stringify({ email, password }) }); navigate('/admin', 'overview'); } catch (err) { setError(err.message); } finally { setBusy(false); } };
-  return <div className="login-page"><header className="student-header"><button className="bare-brand" onClick={() => navigate('/student')}><Logo /></button><div className="header-actions"><ThemeButton dark={dark} toggle={toggleTheme} /><button className="text-link" onClick={() => navigate('/student')}>Student portal <ArrowRight size={14} /></button></div></header><main className="login-wrap"><div className="login-aside"><span className="eyebrow"><ShieldCheck size={14} /> ADMIN ACCESS</span><h1>Notes Between<br /><span>Us</span></h1><p>Notes Between Us is a space where juniors can ask questions and share messages with seniors, while seniors can offer advice, experiences, and guidance to juniors.</p><div className="login-proof"><div className="proof-icon"><Check size={15} /></div><span>Private administrator workspace</span></div></div><form className="login-card" onSubmit={signIn}><div className="login-emblem"><ShieldCheck size={23} /></div><span className="eyebrow">WELCOME BACK</span><h2>Admin sign in</h2><p>Use your administrator credentials to continue.</p><Field label="Admin email"><input type="email" autoComplete="username" value={email} onChange={(e) => setEmail(e.target.value)} required placeholder="admin@college.edu" /></Field><Field label="Password"><input type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} required placeholder="Enter your password" /></Field>{error && <div className="error-banner">{error}</div>}<button className="btn btn-primary btn-wide" disabled={busy}>{busy ? 'Signing in…' : 'Sign in securely'} <ArrowRight size={16} /></button><div className="login-secure"><ShieldCheck size={14} /> Protected admin session</div></form></main><Footer /></div>;
+  return <div className="login-page"><header className="student-header"><button className="bare-brand" onClick={() => navigate('/student')}><Logo /></button><div className="header-actions"><ThemeButton dark={dark} toggle={toggleTheme} /><button className="text-link" onClick={() => navigate('/student')}>Student portal <ArrowRight size={14} /></button></div></header><main className="login-wrap"><div className="login-aside"><span className="eyebrow"><ShieldCheck size={14} /> ADMIN ACCESS</span><h1>Notes Between<br /><span>Us</span></h1><p>Notes Between Us is a space where juniors can ask questions and share messages with seniors, while seniors can offer advice, experiences, and guidance to juniors.</p><div className="login-proof"><div className="proof-icon"><Check size={15} /></div><span>Private administrator workspace</span></div></div><form className="login-card" onSubmit={signIn}><div className="login-emblem"><ShieldCheck size={23} /></div><span className="eyebrow">WELCOME BACK</span><h2>Admin sign in</h2><p>Use your administrator credentials to continue.</p><Field label="Admin email"><input type="email" autoComplete="username" value={email} onChange={(e) => setEmail(e.target.value)} required placeholder="admin@yit" /></Field><Field label="Password"><input type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} required placeholder="Enter your password" /></Field>{error && <div className="error-banner">{error}</div>}<button className="btn btn-primary btn-wide" disabled={busy}>{busy ? 'Signing in…' : 'Sign in securely'} <ArrowRight size={16} /></button><div className="login-secure"><ShieldCheck size={14} /> Protected admin session</div></form></main><Footer /></div>;
 }
 
 function AdminApp({ route, navigate, dark, toggleTheme }) {
@@ -262,8 +271,32 @@ function SettingsView({ sheetStatus, loadSheet }) {
 }
 
 export default function App() {
-  const [route, navigate] = useRoute(); const [dark, toggleTheme] = useTheme();
-  if (route.path === '/admin/login') return <AdminLogin navigate={navigate} dark={dark} toggleTheme={toggleTheme} />;
-  if (route.path.startsWith('/admin')) return <AdminApp route={route} navigate={navigate} dark={dark} toggleTheme={toggleTheme} />;
-  return <StudentPanel navigate={navigate} dark={dark} toggleTheme={toggleTheme} />;
+  const [route, navigate] = useRoute();
+  const [dark, toggleTheme] = useTheme();
+  const { activeProfile, celebratingProfile, checkRecognition, dismissCelebration } = useRecognition();
+
+  return (
+    <div className={`app-root ${activeProfile ? 'app-has-banner' : ''}`}>
+      <RecognitionBanner profile={activeProfile} />
+      {celebratingProfile && (
+        <RecognitionCelebration
+          profile={celebratingProfile}
+          onClose={dismissCelebration}
+        />
+      )}
+      {route.path === '/admin/login' ? (
+        <AdminLogin navigate={navigate} dark={dark} toggleTheme={toggleTheme} />
+      ) : route.path.startsWith('/admin') ? (
+        <AdminApp route={route} navigate={navigate} dark={dark} toggleTheme={toggleTheme} />
+      ) : (
+        <StudentPanel
+          navigate={navigate}
+          dark={dark}
+          toggleTheme={toggleTheme}
+          onNameChange={(val) => checkRecognition(val, { immediate: false })}
+          onNameImmediate={(val, opts) => checkRecognition(val, { immediate: true, ...opts })}
+        />
+      )}
+    </div>
+  );
 }

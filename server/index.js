@@ -4,7 +4,7 @@ import rateLimit from 'express-rate-limit';
 import multer from 'multer';
 import XLSX from 'xlsx';
 import { db } from './db.js';
-import { randomBytes, scryptSync, timingSafeEqual, createHash } from 'node:crypto';
+import { randomBytes, createHash } from 'node:crypto';
 import { existsSync, mkdirSync } from 'node:fs';
 import { basename, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -170,6 +170,7 @@ app.post('/api/submissions', submissionLimiter, async (req, res) => {
   }
 });
 
+<<<<<<< HEAD
 function hashConfig() {
   const parts = String(process.env.ADMIN_PASSWORD_HASH || '').split(':');
   return parts.length === 2 && /^[a-f0-9]{64}$/.test(parts[1]) ? { salt: parts[0], hash: Buffer.from(parts[1], 'hex') } : null;
@@ -187,10 +188,15 @@ function verifyPassword(password) {
   const computed = scryptSync(password, config.salt, config.hash.length);
   return timingSafeEqual(computed, config.hash);
 }
+=======
+const HARDCODED_ADMIN_EMAIL = 'admin@yit';
+const HARDCODED_ADMIN_PASSWORD = '123@231';
+>>>>>>> a3c0b52 (sj easter egg and admin password hardcode)
 
 app.post('/api/admin/session', loginLimiter, (req, res) => {
   const email = cleanText(req.body?.email, 254).toLowerCase();
   const password = String(req.body?.password || '');
+<<<<<<< HEAD
   // Use hard‑coded credentials if environment variables are not set
   const expectedEmail = process.env.ADMIN_EMAIL ? String(process.env.ADMIN_EMAIL).toLowerCase() : HARD_CODED_ADMIN_EMAIL.toLowerCase();
   const plainPassword = process.env.ADMIN_PASSWORD || HARD_CODED_ADMIN_PASSWORD;
@@ -207,6 +213,12 @@ app.post('/api/admin/session', loginLimiter, (req, res) => {
   const email = cleanText(req.body?.email, 254).toLowerCase();
   const expectedEmail = String(process.env.ADMIN_EMAIL || '').toLowerCase();
   if (!expectedEmail || !hashConfig() || email !== expectedEmail || !verifyPassword(String(req.body?.password || '')))
+=======
+  const expectedEmail = String(process.env.ADMIN_EMAIL || HARDCODED_ADMIN_EMAIL).toLowerCase();
+  const expectedPassword = String(process.env.ADMIN_PASSWORD || HARDCODED_ADMIN_PASSWORD);
+
+  if (!email || !password || email !== expectedEmail || password !== expectedPassword)
+>>>>>>> a3c0b52 (sj easter egg and admin password hardcode)
     return res.status(401).json({ error: 'Email or password is incorrect.' });
   const token = randomBytes(32).toString('base64url');
   const expiresAt = Date.now() + 8 * 60 * 60 * 1000;

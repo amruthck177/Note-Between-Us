@@ -1,0 +1,532 @@
+/* ==========================================================================
+   Yenartificia Secret Recognition & Easter Egg System Styles
+   ========================================================================== */
+
+/* Top Recognition Banner */
+.recognition-banner {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 38px;
+  z-index: 1000;
+  background: linear-gradient(90deg, #090d16 0%, #17140b 25%, #251e0e 50%, #17140b 75%, #090d16 100%);
+  border-bottom: 1px solid rgba(245, 158, 11, 0.45);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.35), 0 0 15px rgba(245, 158, 11, 0.15);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  user-select: none;
+  animation: bannerSlideDown 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes bannerSlideDown {
+  from {
+    transform: translateY(-100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.recognition-banner-inner {
+  position: relative;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 0 16px;
+  max-width: 100%;
+}
+
+.banner-crown {
+  font-size: 15px;
+  line-height: 1;
+  filter: drop-shadow(0 0 6px rgba(251, 191, 36, 0.7));
+  animation: crownPulse 2.6s ease-in-out infinite;
+}
+
+@keyframes crownPulse {
+  0%, 100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.15) rotate(3deg);
+  }
+}
+
+.banner-content {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.banner-designation {
+  background: linear-gradient(135deg, #fef08a 0%, #fbbf24 60%, #f59e0b 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  font-weight: 800;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+}
+
+.banner-divider {
+  color: rgba(245, 158, 11, 0.6);
+  font-weight: 600;
+}
+
+.banner-name {
+  color: #ffffff;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+}
+
+.banner-sparkle {
+  color: #fde047;
+  display: inline-flex;
+  align-items: center;
+  animation: sparkleTwinkle 2s ease-in-out infinite;
+}
+
+@keyframes sparkleTwinkle {
+  0%, 100% {
+    opacity: 0.5;
+    transform: scale(0.9);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.2);
+  }
+}
+
+/* Shimmer Light Reflection */
+.banner-shimmer-track {
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 50%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent 0%, rgba(254, 240, 138, 0.18) 50%, transparent 100%);
+  animation: bannerShimmer 4s ease-in-out infinite;
+  pointer-events: none;
+}
+
+@keyframes bannerShimmer {
+  0% {
+    left: -100%;
+  }
+  40%, 100% {
+    left: 200%;
+  }
+}
+
+/* Adjust application top padding when banner is present */
+.app-has-banner {
+  padding-top: 38px;
+}
+
+/* ==========================================================================
+   Full-Screen Celebration Overlay
+   ========================================================================== */
+
+.celebration-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: radial-gradient(ellipse at 50% 35%, #18150c 0%, #07090e 80%, #030407 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 16px;
+  overflow: hidden;
+  animation: celebrationFadeIn 0.35s ease-out forwards;
+}
+
+.celebration-overlay.celebration-fade-out {
+  animation: celebrationFadeOut 0.45s ease-in forwards;
+}
+
+@keyframes celebrationFadeIn {
+  from {
+    opacity: 0;
+    backdrop-filter: blur(0px);
+  }
+  to {
+    opacity: 1;
+    backdrop-filter: blur(10px);
+  }
+}
+
+@keyframes celebrationFadeOut {
+  from {
+    opacity: 1;
+    transform: scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: scale(1.03);
+  }
+}
+
+.celebration-confetti {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.celebration-close-btn {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  z-index: 10;
+  width: 38px;
+  height: 38px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: #cbd5e1;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.celebration-close-btn:hover {
+  background: rgba(255, 255, 255, 0.18);
+  color: #ffffff;
+  transform: scale(1.08);
+}
+
+.celebration-card {
+  position: relative;
+  z-index: 5;
+  width: min(540px, 100%);
+  max-height: 90vh;
+  overflow-y: auto;
+  text-align: center;
+  padding: 38px 30px 32px;
+  border-radius: 24px;
+  background: rgba(14, 18, 27, 0.88);
+  border: 1px solid rgba(245, 158, 11, 0.35);
+  box-shadow:
+    0 25px 70px rgba(0, 0, 0, 0.65),
+    0 0 50px rgba(245, 158, 11, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(20px);
+  animation: cardScaleUp 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes cardScaleUp {
+  0% {
+    transform: scale(0.85) translateY(20px);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(1) translateY(0);
+    opacity: 1;
+  }
+}
+
+/* Badge */
+.celebration-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px;
+  border-radius: 999px;
+  background: rgba(245, 158, 11, 0.12);
+  border: 1px solid rgba(245, 158, 11, 0.4);
+  color: #fef08a;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  margin-bottom: 22px;
+  box-shadow: 0 0 18px rgba(245, 158, 11, 0.2);
+  animation: badgeSlideDown 0.6s ease-out forwards;
+}
+
+@keyframes badgeSlideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.badge-sparkle {
+  color: #fbbf24;
+}
+
+/* Crown Emblem */
+.celebration-crown-wrap {
+  position: relative;
+  width: 90px;
+  height: 72px;
+  margin: 0 auto 16px;
+  display: grid;
+  place-items: center;
+}
+
+.crown-glow-ring {
+  position: absolute;
+  inset: -12px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(251, 191, 36, 0.35) 0%, rgba(251, 191, 36, 0) 70%);
+  filter: blur(8px);
+  animation: glowPulse 3s ease-in-out infinite;
+}
+
+@keyframes glowPulse {
+  0%, 100% {
+    opacity: 0.6;
+    transform: scale(0.95);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.1);
+  }
+}
+
+.celebration-crown-svg {
+  position: relative;
+  width: 86px;
+  height: 68px;
+  filter: drop-shadow(0 6px 16px rgba(217, 119, 6, 0.5));
+  animation: crownFloat 3.2s ease-in-out infinite;
+}
+
+@keyframes crownFloat {
+  0%, 100% {
+    transform: translateY(0) rotate(0deg);
+  }
+  50% {
+    transform: translateY(-5px) rotate(1.5deg);
+  }
+}
+
+/* Full Name */
+.celebration-name {
+  margin: 12px 0 10px;
+  font-size: 28px;
+  line-height: 1.15;
+  font-weight: 850;
+  letter-spacing: -0.5px;
+  background: linear-gradient(135deg, #ffffff 0%, #fef08a 45%, #fbbf24 80%, #f59e0b 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  filter: drop-shadow(0 2px 10px rgba(245, 158, 11, 0.25));
+  text-transform: uppercase;
+  animation: nameReveal 0.6s cubic-bezier(0.16, 1, 0.3, 1) 0.15s both;
+}
+
+@keyframes nameReveal {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Designation */
+.celebration-designation {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin: 0 auto 16px;
+  max-width: 440px;
+  animation: designationReveal 0.6s cubic-bezier(0.16, 1, 0.3, 1) 0.25s both;
+}
+
+@keyframes designationReveal {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.designation-line {
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(245, 158, 11, 0.4), transparent);
+}
+
+.designation-text {
+  color: #fbbf24;
+  font-size: 13px;
+  font-weight: 750;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  text-shadow: 0 0 12px rgba(251, 191, 36, 0.3);
+}
+
+/* Personalized Message */
+.celebration-message {
+  max-width: 420px;
+  margin: 0 auto 22px;
+  color: #e2e8f0;
+  font-size: 14px;
+  line-height: 1.6;
+  font-style: italic;
+  font-weight: 450;
+  padding: 12px 18px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  animation: messageReveal 0.6s cubic-bezier(0.16, 1, 0.3, 1) 0.35s both;
+}
+
+@keyframes messageReveal {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Footer Tag */
+.celebration-footer-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #94a3b8;
+  font-size: 9px;
+  font-weight: 650;
+  letter-spacing: 0.9px;
+  text-transform: uppercase;
+  margin-bottom: 24px;
+  opacity: 0.85;
+  animation: footerReveal 0.6s cubic-bezier(0.16, 1, 0.3, 1) 0.45s both;
+}
+
+@keyframes footerReveal {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 0.85;
+  }
+}
+
+/* Continue Button */
+.celebration-continue-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 42px;
+  padding: 0 24px;
+  border: 1px solid rgba(251, 191, 36, 0.5);
+  border-radius: 12px;
+  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+  color: #0b0f19;
+  font-size: 12px;
+  font-weight: 750;
+  letter-spacing: 0.3px;
+  cursor: pointer;
+  box-shadow: 0 6px 20px rgba(217, 119, 6, 0.35);
+  transition: all 0.2s ease;
+  animation: btnReveal 0.6s cubic-bezier(0.16, 1, 0.3, 1) 0.5s both;
+}
+
+@keyframes btnReveal {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.celebration-continue-btn:hover {
+  background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%);
+  box-shadow: 0 8px 24px rgba(245, 158, 11, 0.45);
+  transform: translateY(-2px);
+}
+
+/* Responsive adjustments */
+@media (max-width: 640px) {
+  .recognition-banner {
+    height: 36px;
+  }
+
+  .app-has-banner {
+    padding-top: 36px;
+  }
+
+  .banner-content {
+    font-size: 10px;
+    gap: 6px;
+  }
+
+  .banner-sparkle {
+    display: none;
+  }
+
+  .celebration-card {
+    padding: 28px 18px 24px;
+    border-radius: 20px;
+  }
+
+  .celebration-name {
+    font-size: 22px;
+  }
+
+  .designation-text {
+    font-size: 11px;
+  }
+
+  .celebration-message {
+    font-size: 12px;
+    padding: 10px 14px;
+  }
+
+  .celebration-crown-wrap {
+    width: 76px;
+    height: 60px;
+  }
+
+  .celebration-crown-svg {
+    width: 72px;
+    height: 56px;
+  }
+}
+
+@media (max-width: 380px) {
+  .banner-content {
+    font-size: 9px;
+  }
+  .celebration-name {
+    font-size: 19px;
+  }
+}

@@ -10,13 +10,12 @@ const port = 43871 + (process.pid % 1000);
 const origin = `http://127.0.0.1:${port}`;
 const dbFile = `data/test-${process.pid}.sqlite`;
 const password = 'TestOnly!AdminPassword92';
-const passwordHash = `test-salt:${scryptSync(password, 'test-salt', 64).toString('hex')}`;
 
 test('student submission and protected admin workflows', async (t) => {
   mkdirSync(resolve(root, 'data'), { recursive: true });
   const server = spawn(process.execPath, ['server/index.js'], {
     cwd: root,
-    env: { ...process.env, NODE_ENV: 'test', PORT: String(port), APP_ORIGIN: origin, DB_PATH: dbFile, ADMIN_EMAIL: 'admin@test.local', ADMIN_PASSWORD_HASH: passwordHash, GOOGLE_SHEET_ID: '', GOOGLE_SERVICE_ACCOUNT_JSON: '' },
+    env: { ...process.env, NODE_ENV: 'test', PORT: String(port), APP_ORIGIN: origin, DB_PATH: dbFile, ADMIN_EMAIL: 'admin@test.local', ADMIN_PASSWORD: password, GOOGLE_SHEET_ID: '', GOOGLE_SERVICE_ACCOUNT_JSON: '' },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   let serverOutput = '';
