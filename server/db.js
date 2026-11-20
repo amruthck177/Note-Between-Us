@@ -17,7 +17,7 @@ const projectRoot = resolve(__dirname, '..');
 // In development, fall back to a local file path (data/inuguration.sqlite).
 function getDatabaseUrl() {
   const envUrl = process.env.TURSO_DATABASE_URL;
-  if (envUrl) {
+  if (envUrl && !envUrl.includes('your-database-name') && process.env.TURSO_AUTH_TOKEN) {
     return envUrl;
   }
   // Local SQLite file – libsql accepts a "file:" URL.

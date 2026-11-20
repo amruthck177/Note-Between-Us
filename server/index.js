@@ -11,17 +11,18 @@ import { fileURLToPath } from 'node:url';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const projectRoot = resolve(here, '..');
-const HARD_CODED_ADMIN_EMAIL = 'admin@yit';
-const HARD_CODED_ADMIN_PASSWORD = '123@231';
+const HARDCODED_ADMIN_EMAIL = 'admin@yit';
+const HARDCODED_ADMIN_PASSWORD = '123@231';
 const distPath = resolve(projectRoot, 'dist');
 const port = Number(process.env.PORT || 4174);
 const host = process.env.HOST || '127.0.0.1';
-const TARGET_SPREADSHEET_ID = '1qmC2UCeR_bFcLc9rsLpneTaEKR7ym4c1nKWHVulw2XQ';
+const TARGET_SPREADSHEET_ID = process.env.GOOGLE_SHEET_ID || '1qmC2UCeR_bFcLc9rsLpneTaEKR7ym4c1nKWHVulw2XQ';
 const TARGET_SHEET_TAB = 'Enter Student Data';
 
 (async () => {
   // Initialize schema and auxiliary tables
-  await db.exec(`
+  try {
+    await db.exec(`
     PRAGMA foreign_keys = ON;
     CREATE TABLE IF NOT EXISTS students (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -58,11 +59,13 @@ const TARGET_SHEET_TAB = 'Enter Student Data';
     CREATE INDEX IF NOT EXISTS students_usn_idx ON students(usn COLLATE NOCASE);
     CREATE INDEX IF NOT EXISTS students_batch_idx ON students(batch);
   `);
-  // Ensure legacy column exists for backward compatibility
-  const stmt = await db.prepare('PRAGMA table_info(students)');
-  const cols = await stmt.all();
-  if (!cols.some(c => c.name === 'sheet_previous_usn')) {
-    await db.exec("ALTER TABLE students ADD COLUMN sheet_previous_usn TEXT NOT NULL DEFAULT ''");
+    // Ensure legacy column exists for backward compatibility
+    const cols = await (await db.prepare('PRAGMA table_info(students)')).all();
+    if (!cols.some(c => c.name === 'sheet_previous_usn')) {
+      await db.exec("ALTER TABLE students ADD COLUMN sheet_previous_usn TEXT NOT NULL DEFAULT ''");
+    }
+  } catch (err) {
+    console.warn('Database initialization note:', err.message);
   }
 })();
 
@@ -77,8 +80,8 @@ app.use((req, res, next) => {
 });
 app.use(express.json({ limit: '64kb' }));
 
-const submissionLimiter = rateLimit({ windowMs: 10 * 60 * 1000, limit: 5, standardHeaders: 'draft-8', legacyHeaders: false });
-const loginLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 8, standardHeaders: 'draft-8', legacyHeaders: false });
+const submissionLimiter = rateLimit({ windowMs: 10 * 60 * 1000, limit: 10, standardHeaders: 'draft-8', legacyHeaders: false });
+const loginLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 15, standardHeaders: 'draft-8', legacyHeaders: false });
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 8 * 1024 * 1024, files: 1 } });
 
 const normalUsn = (value) => String(value ?? '').replace(/\s+/g, '').toUpperCase();
@@ -162,12 +165,12 @@ app.post('/api/submissions', submissionLimiter, async (req, res) => {
     const result = await db.prepare(`INSERT INTO students (name, usn, dob, questions_senior, advice_junior, batch, semester, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(student.name, student.usn, student.dob, student.questionsSenior, student.adviceJunior, student.batch, student.semester, stamp, stamp);
     let sheetSync = 'pending';
     try {
-      sheetSync = await appendStudentToSheet(student) ? 'synced' : 'pending';
+      sheetSync = (await appendStudentToSheet(student)) ? 'synced' : 'pending';
     } catch (error) {
       console.error('Google Sheets sync failed:', error.message);
       sheetSync = 'pending';
     }
-    db.prepare('UPDATE students SET sheet_sync = ? WHERE id = ?').run(sheetSync, result.lastInsertRowid);
+    await db.prepare('UPDATE students SET sheet_sync = ? WHERE id = ?').run(sheetSync, result.lastInsertRowid);
     res.status(201).json({ ok: true, batch: student.batch, semester: student.semester, sheetSync });
   } catch (error) {
     if (String(error.message).includes('UNIQUE constraint failed'))
@@ -176,9 +179,6 @@ app.post('/api/submissions', submissionLimiter, async (req, res) => {
     res.status(500).json({ error: 'Submission could not be saved.' });
   }
 });
-
-const HARDCODED_ADMIN_EMAIL = 'admin@yit';
-const HARDCODED_ADMIN_PASSWORD = '123@231';
 
 app.post('/api/admin/session', loginLimiter, async (req, res) => {
   try {
@@ -214,7 +214,7 @@ app.delete('/api/admin/session', requireAdmin, async (req, res) => {
     inMemoryAdminSessions.delete(hash);
     try {
       await db.prepare('DELETE FROM admin_sessions WHERE token_hash = ?').run(hash);
-    } catch {}
+    } catch { }
   }
   res.clearCookie('inuguration_admin', { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'strict', path: '/' });
   res.json({ ok: true });
@@ -252,31 +252,48 @@ const toStudent = (row) => ({
   sheetSync: row.sheet_sync,
 });
 
-app.get('/api/admin/stats', requireAdmin, (_req, res) => {
-  const counts = db.prepare("SELECT COUNT(*) AS total, SUM(batch='2023') AS b2023, SUM(batch='2024') AS b2024, SUM(batch='2025') AS b2025 FROM students").get();
-  res.json({ total: counts.total || 0, batches: { '2023': counts.b2023 || 0, '2024': counts.b2024 || 0, '2025': counts.b2025 || 0 } });
+app.get('/api/admin/stats', requireAdmin, async (_req, res) => {
+  try {
+    const counts = await db.prepare("SELECT COUNT(*) AS total, SUM(batch='2023') AS b2023, SUM(batch='2024') AS b2024, SUM(batch='2025') AS b2025 FROM students").get();
+    res.json({ total: counts?.total || 0, batches: { '2023': counts?.b2023 || 0, '2024': counts?.b2024 || 0, '2025': counts?.b2025 || 0 } });
+  } catch (err) {
+    console.error('Stats error:', err);
+    res.status(500).json({ error: 'Could not fetch stats.' });
+  }
 });
 
-app.get('/api/admin/records', requireAdmin, (req, res) => {
-  const { where, params } = filtersFrom(req);
-  const page = Math.max(1, Math.floor(Number(req.query.page) || 1));
-  const pageSize = Math.min(100, Math.max(10, Math.floor(Number(req.query.pageSize) || 20)));
-  const sortKey = ({ usn: 'usn', name: 'name', dob: 'dob', batch: 'batch' })[req.query.sort] || 'usn';
-  const direction = req.query.direction === 'desc' ? 'DESC' : 'ASC';
-  const total = db.prepare(`SELECT COUNT(*) AS count FROM students ${where}`).get(...params).count;
-  const rows = db.prepare(`SELECT * FROM students ${where} ORDER BY ${sortKey} ${direction} LIMIT ? OFFSET ?`).all(...params, pageSize, (page - 1) * pageSize);
-  res.json({ rows: rows.map(toStudent), total, page, pageSize, pages: Math.ceil(total / pageSize) });
+app.get('/api/admin/records', requireAdmin, async (req, res) => {
+  try {
+    const { where, params } = filtersFrom(req);
+    const page = Math.max(1, Math.floor(Number(req.query.page) || 1));
+    const pageSize = Math.min(100, Math.max(10, Math.floor(Number(req.query.pageSize) || 20)));
+    const sortKey = ({ usn: 'usn', name: 'name', dob: 'dob', batch: 'batch' })[req.query.sort] || 'usn';
+    const direction = req.query.direction === 'desc' ? 'DESC' : 'ASC';
+
+    const countRow = await db.prepare(`SELECT COUNT(*) AS count FROM students ${where}`).get(...params);
+    const total = countRow?.count || 0;
+
+    const rows = await db.prepare(`SELECT * FROM students ${where} ORDER BY ${sortKey} ${direction} LIMIT ? OFFSET ?`).all(...params, pageSize, (page - 1) * pageSize);
+    res.json({ rows: rows.map(toStudent), total, page, pageSize, pages: Math.ceil(total / pageSize) });
+  } catch (err) {
+    console.error('Records fetch error:', err);
+    res.status(500).json({ error: 'Could not fetch records.' });
+  }
 });
 
-app.get('/api/admin/records/:id', requireAdmin, (req, res) => {
-  const row = db.prepare('SELECT * FROM students WHERE id = ?').get(Number(req.params.id));
-  if (!row) return res.status(404).json({ error: 'Record not found.' });
-  res.json(toStudent(row));
+app.get('/api/admin/records/:id', requireAdmin, async (req, res) => {
+  try {
+    const row = await db.prepare('SELECT * FROM students WHERE id = ?').get(Number(req.params.id));
+    if (!row) return res.status(404).json({ error: 'Record not found.' });
+    res.json(toStudent(row));
+  } catch (err) {
+    res.status(500).json({ error: 'Could not fetch record.' });
+  }
 });
 
 app.patch('/api/admin/records/:id', requireAdmin, async (req, res) => {
   const id = Number(req.params.id);
-  const current = db.prepare('SELECT * FROM students WHERE id = ?').get(id);
+  const current = await db.prepare('SELECT * FROM students WHERE id = ?').get(id);
   if (!current) return res.status(404).json({ error: 'Record not found.' });
   const merged = {
     name: req.body?.name ?? current.name,
@@ -288,17 +305,18 @@ app.patch('/api/admin/records/:id', requireAdmin, async (req, res) => {
   const { errors, student } = validateStudent(merged);
   if (Object.keys(errors).length) return res.status(400).json({ error: 'Invalid record.', fields: errors });
   try {
-    db.prepare(`UPDATE students SET name=?, usn=?, dob=?, questions_senior=?, advice_junior=?, batch=?, semester=?, updated_at=?, sheet_sync='pending', sheet_previous_usn=? WHERE id=?`)
+    await db.prepare(`UPDATE students SET name=?, usn=?, dob=?, questions_senior=?, advice_junior=?, batch=?, semester=?, updated_at=?, sheet_sync='pending', sheet_previous_usn=? WHERE id=?`)
       .run(student.name, student.usn, student.dob, student.questionsSenior, student.adviceJunior, student.batch, student.semester, now(), current.usn, id);
     let sheetSync = 'local-only';
     try {
-      if (getSheetsClient()) sheetSync = await updateStudentInSheet(current.usn, student) ? 'synced' : 'local-only';
+      if (await getSheetsClient()) sheetSync = (await updateStudentInSheet(current.usn, student)) ? 'synced' : 'local-only';
     } catch (error) {
       console.error('Google Sheets update failed:', error.message);
       sheetSync = 'local-only';
     }
-    db.prepare('UPDATE students SET sheet_sync=?, sheet_previous_usn=? WHERE id=?').run(sheetSync, sheetSync === 'synced' ? '' : current.usn, id);
-    res.json(toStudent(db.prepare('SELECT * FROM students WHERE id=?').get(id)));
+    await db.prepare('UPDATE students SET sheet_sync=?, sheet_previous_usn=? WHERE id=?').run(sheetSync, sheetSync === 'synced' ? '' : current.usn, id);
+    const updated = await db.prepare('SELECT * FROM students WHERE id=?').get(id);
+    res.json(toStudent(updated));
   } catch (error) {
     if (String(error.message).includes('UNIQUE constraint failed'))
       return res.status(409).json({ error: 'Another record already uses this USN.' });
@@ -308,34 +326,42 @@ app.patch('/api/admin/records/:id', requireAdmin, async (req, res) => {
 
 app.delete('/api/admin/records/:id', requireAdmin, async (req, res) => {
   const id = Number(req.params.id);
-  const row = db.prepare('SELECT * FROM students WHERE id=?').get(id);
+  const row = await db.prepare('SELECT * FROM students WHERE id=?').get(id);
   if (!row) return res.status(404).json({ error: 'Record not found.' });
-  if (getSheetsClient()) {
-    try { await deleteStudentFromSheet(row.usn); } catch (error) { console.error('Google Sheets delete failed:', error.message); return res.status(502).json({ error: 'The Google Sheet could not be updated, so the student record was not deleted.' }); }
+  const client = await getSheetsClient();
+  if (client) {
+    try {
+      await deleteStudentFromSheet(row.usn);
+    } catch (error) {
+      console.error('Google Sheets delete failed:', error.message);
+      return res.status(502).json({ error: 'The Google Sheet could not be updated, so the student record was not deleted.' });
+    }
   }
-  const result = db.prepare('DELETE FROM students WHERE id = ?').run(id);
+  const result = await db.prepare('DELETE FROM students WHERE id = ?').run(id);
   if (!result.changes) return res.status(404).json({ error: 'Record not found.' });
-  res.json({ ok: true, sheetSync: getSheetsClient() ? 'synced' : 'local-only' });
+  res.json({ ok: true, sheetSync: client ? 'synced' : 'local-only' });
 });
 
-function rowsForExport(req) {
+async function rowsForExport(req) {
   const { where, params } = filtersFrom(req);
-  return db.prepare(`SELECT name, usn, dob, questions_senior, advice_junior, batch, semester, sheet_sync, sheet_previous_usn FROM students ${where} ORDER BY usn COLLATE NOCASE ASC`).all(...params);
+  return await db.prepare(`SELECT name, usn, dob, questions_senior, advice_junior, batch, semester, sheet_sync, sheet_previous_usn FROM students ${where} ORDER BY usn COLLATE NOCASE ASC`).all(...params);
 }
 function exportRows(rows) {
   return rows.map((r, i) => ({ 'Sl No': i + 1, Name: r.name, USN: r.usn, DOB: r.dob, 'Questions to Senior': r.questions_senior, 'Message / Advice to Junior': r.advice_junior, Batch: r.batch, Semester: r.semester }));
 }
-app.get('/api/admin/export.xlsx', requireAdmin, (req, res) => {
+app.get('/api/admin/export.xlsx', requireAdmin, async (req, res) => {
+  const rows = await rowsForExport(req);
   const book = XLSX.utils.book_new();
-  const sheet = XLSX.utils.json_to_sheet(exportRows(rowsForExport(req)));
+  const sheet = XLSX.utils.json_to_sheet(exportRows(rows));
   XLSX.utils.book_append_sheet(book, sheet, 'Student Records');
   const buffer = XLSX.write(book, { type: 'buffer', bookType: 'xlsx' });
   res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
   res.setHeader('Content-Disposition', 'attachment; filename="inuguration-students.xlsx"');
   res.send(buffer);
 });
-app.get('/api/admin/export.csv', requireAdmin, (req, res) => {
-  const sheet = XLSX.utils.json_to_sheet(exportRows(rowsForExport(req)));
+app.get('/api/admin/export.csv', requireAdmin, async (req, res) => {
+  const rows = await rowsForExport(req);
+  const sheet = XLSX.utils.json_to_sheet(exportRows(rows));
   res.setHeader('Content-Type', 'text/csv; charset=utf-8');
   res.setHeader('Content-Disposition', 'attachment; filename="inuguration-students.csv"');
   res.send(XLSX.utils.sheet_to_csv(sheet));
@@ -346,7 +372,7 @@ const headerAliases = {
   name: ['name', 'studentname', 'fullname'],
   usn: ['usn', 'universityseatnumber'],
   dob: ['dob', 'dateofbirth', 'birthdate'],
-  questionsSenior: ['questionstosenior', 'questionforsenior', 'questionstosenior'],
+  questionsSenior: ['questionstosenior', 'questionforsenior', 'questionssenior'],
   adviceJunior: ['messageadvicetojunior', 'advicetojunior', 'messagetojunior', 'advice'],
 };
 function mapImportRow(row) {
@@ -358,7 +384,7 @@ function mapImportRow(row) {
   return result;
 }
 function parseImportFile(buffer, originalName) {
-  const book = /\\.csv$/i.test(originalName)
+  const book = /\.csv$/i.test(originalName)
     ? XLSX.read(buffer.toString('utf8'), { type: 'string', cellDates: false, raw: true })
     : XLSX.read(buffer, { type: 'buffer', cellDates: false, raw: true });
   if (!book.SheetNames.length) throw new Error('The file has no worksheets.');
@@ -383,17 +409,18 @@ function normalizeDate(value) {
     return parsed ? `${parsed.y}-${String(parsed.m).padStart(2, '0')}-${String(parsed.d).padStart(2, '0')}` : '';
   }
   const text = String(value ?? '').trim();
-  if (/^\\d{4}-\\d{2}-\\d{2}$/.test(text)) return text;
-  const match = /^(\\d{1,2})[\\/\\-](\\d{1,2})[\\/\\-](\\d{4})$/.exec(text);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(text)) return text;
+  const match = /^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/.exec(text);
   return match ? `${match[3]}-${String(match[2]).padStart(2, '0')}-${String(match[1]).padStart(2, '0')}` : text;
 }
 const importPreviews = new Map();
-app.post('/api/admin/imports/preview', requireAdmin, upload.single('file'), (req, res) => {
+app.post('/api/admin/imports/preview', requireAdmin, upload.single('file'), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'Choose an .xlsx or .csv file.' });
-  if (!/\\.(xlsx|csv)$/i.test(req.file.originalname)) return res.status(415).json({ error: 'Only .xlsx and .csv files are supported.' });
+  if (!/\.(xlsx|csv)$/i.test(req.file.originalname)) return res.status(415).json({ error: 'Only .xlsx and .csv files are supported.' });
   try {
     const preview = parseImportFile(req.file.buffer, req.file.originalname);
-    const existing = new Set(db.prepare('SELECT usn FROM students').all().map(r => r.usn));
+    const existingRows = await db.prepare('SELECT usn FROM students').all();
+    const existing = new Set(existingRows.map(r => r.usn));
     preview.rows = preview.rows.map(entry => entry.student && existing.has(entry.student.usn) ? { ...entry, errors: { ...entry.errors, usn: 'This USN already exists in the database.' } } : entry);
     const token = randomBytes(18).toString('base64url');
     importPreviews.set(token, { expires: Date.now() + 10 * 60 * 1000, rows: preview.rows, file: req.file.buffer, name: basename(req.file.originalname), mime: req.file.mimetype || 'application/octet-stream' });
@@ -402,29 +429,27 @@ app.post('/api/admin/imports/preview', requireAdmin, upload.single('file'), (req
     res.status(400).json({ error: error.message || 'The spreadsheet could not be read.' });
   }
 });
-app.post('/api/admin/imports/:token/confirm', requireAdmin, (req, res) => {
+app.post('/api/admin/imports/:token/confirm', requireAdmin, async (req, res) => {
   const preview = importPreviews.get(req.params.token);
   importPreviews.delete(req.params.token);
   if (!preview || preview.expires < Date.now()) return res.status(410).json({ error: 'Import preview expired. Upload the file again.' });
   const accepted = preview.rows.filter(e => e.student && !Object.keys(e.errors).length);
-  const insert = db.prepare(`INSERT OR IGNORE INTO students (name, usn, dob, questions_senior, advice_junior, batch, semester, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`);
   let imported = 0;
-  db.transaction(() => {
-    for (const { student } of accepted) {
-      imported += insert.run(student.name, student.usn, student.dob, student.questionsSenior, student.adviceJunior, student.batch, student.semester, now(), now()).changes;
-    }
-  })();
-  const file = db.prepare('INSERT INTO imported_files (original_name, mime_type, size, uploaded_at, content) VALUES (?, ?, ?, ?, ?)').run(preview.name, preview.mime, preview.file.length, now(), preview.file);
+  for (const { student } of accepted) {
+    const ins = await db.prepare(`INSERT OR IGNORE INTO students (name, usn, dob, questions_senior, advice_junior, batch, semester, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(student.name, student.usn, student.dob, student.questionsSenior, student.adviceJunior, student.batch, student.semester, now(), now());
+    imported += ins.changes;
+  }
+  const file = await db.prepare('INSERT INTO imported_files (original_name, mime_type, size, uploaded_at, content) VALUES (?, ?, ?, ?, ?)').run(preview.name, preview.mime, preview.file.length, now(), preview.file);
   res.json({ ok: true, imported, skipped: preview.rows.length - imported, fileId: file.lastInsertRowid });
 });
-app.get('/api/admin/imports', requireAdmin, (_req, res) => {
-  const files = db.prepare('SELECT id, original_name AS name, mime_type AS mimeType, size, uploaded_at AS uploadedAt FROM imported_files ORDER BY id DESC').all();
+app.get('/api/admin/imports', requireAdmin, async (_req, res) => {
+  const files = await db.prepare('SELECT id, original_name AS name, mime_type AS mimeType, size, uploaded_at AS uploadedAt FROM imported_files ORDER BY id DESC').all();
   res.json(files);
 });
-app.get('/api/admin/imports/:id/download', requireAdmin, (req, res) => {
-  const file = db.prepare('SELECT original_name, mime_type, content FROM imported_files WHERE id=?').get(Number(req.params.id));
+app.get('/api/admin/imports/:id/download', requireAdmin, async (req, res) => {
+  const file = await db.prepare('SELECT original_name, mime_type, content FROM imported_files WHERE id=?').get(Number(req.params.id));
   if (!file) return res.status(404).json({ error: 'Imported file not found.' });
-  const safeName = basename(file.original_name).replace(/[\\r\\n\"\\\\]/g, '_');
+  const safeName = basename(file.original_name).replace(/[\r\n\"\\]/g, '_');
   res.setHeader('Content-Type', file.mime_type || 'application/octet-stream');
   res.setHeader('Content-Disposition', `attachment; filename="${safeName}"; filename*=UTF-8''${encodeURIComponent(safeName)}`);
   res.send(file.content);
@@ -434,16 +459,21 @@ let googleSheets = null;
 async function getSheetsClient() {
   if (googleSheets) return googleSheets;
   if (!process.env.GOOGLE_SERVICE_ACCOUNT_JSON) return null;
-  const credentials = JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT_JSON);
-  const { google } = await import('googleapis');
-  const auth = new google.auth.GoogleAuth({ credentials, scopes: ['https://www.googleapis.com/auth/spreadsheets'] });
-  googleSheets = google.sheets({ version: 'v4', auth });
-  return googleSheets;
+  try {
+    const credentials = JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT_JSON);
+    const { google } = await import('googleapis');
+    const auth = new google.auth.GoogleAuth({ credentials, scopes: ['https://www.googleapis.com/auth/spreadsheets'] });
+    googleSheets = google.sheets({ version: 'v4', auth });
+    return googleSheets;
+  } catch (e) {
+    console.error('Failed to initialize Google Sheets client:', e.message);
+    return null;
+  }
 }
 let sheetSyncLock = Promise.resolve();
 function withSheetSyncLock(fn) {
   const next = sheetSyncLock.then(fn, fn);
-  sheetSyncLock = next.catch(() => {});
+  sheetSyncLock = next.catch(() => { });
   return next;
 }
 
@@ -521,11 +551,8 @@ app.get('/api/admin/sheets/status', requireAdmin, async (_req, res) => {
 });
 
 app.post('/api/admin/sheets/export', requireAdmin, async (req, res) => {
-  // Export data to Google Sheets – not available in test environment without credentials.
-  // Return 503 to indicate missing configuration.
-  return res.status(503).json({ error: 'Google Sheets credentials not configured.' });
+  return res.status(503).json({ error: 'Google Sheets export not available.' });
 });
-
 
 app.use('/api', (_req, res) => res.status(404).json({ error: 'API route not found.' }));
 if (process.env.NODE_ENV === 'production' || process.env.SERVE_STATIC === 'true') {
