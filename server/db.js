@@ -20,6 +20,12 @@ function getDatabaseUrl() {
   if (envUrl && !envUrl.includes('your-database-name') && process.env.TURSO_AUTH_TOKEN) {
     return envUrl;
   }
+  // When running on Vercel serverless without Turso, use writable /tmp
+  if (process.env.VERCEL) {
+    const dbPath = resolve('/tmp', 'inuguration.sqlite');
+    mkdirSync(dirname(dbPath), { recursive: true });
+    return `file:${dbPath}`;
+  }
   // Local SQLite file – libsql accepts a "file:" URL.
   const dbPath = resolve(projectRoot, process.env.DB_PATH || 'data/inuguration.sqlite');
   // Ensure directory exists.

@@ -19,57 +19,67 @@ const host = process.env.HOST || '127.0.0.1';
 const TARGET_SPREADSHEET_ID = process.env.GOOGLE_SHEET_ID || '1qmC2UCeR_bFcLc9rsLpneTaEKR7ym4c1nKWHVulw2XQ';
 const TARGET_SHEET_TAB = 'Enter Student Data';
 
-(async () => {
-  // Initialize schema and auxiliary tables
-  try {
-    await db.exec(`
-    PRAGMA foreign_keys = ON;
-    CREATE TABLE IF NOT EXISTS students (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      name TEXT NOT NULL,
-      usn TEXT NOT NULL UNIQUE,
-      dob TEXT NOT NULL,
-      questions_senior TEXT NOT NULL DEFAULT '',
-      advice_junior TEXT NOT NULL DEFAULT '',
-      batch TEXT NOT NULL,
-      semester INTEGER NOT NULL,
-      created_at TEXT NOT NULL,
-      updated_at TEXT NOT NULL,
-      sheet_sync TEXT NOT NULL DEFAULT 'pending',
-      sheet_previous_usn TEXT NOT NULL DEFAULT '',
-      sheet_row INTEGER
-    );
-    CREATE TABLE IF NOT EXISTS admin_sessions (
-      token_hash TEXT PRIMARY KEY,
-      email TEXT NOT NULL,
-      expires_at INTEGER NOT NULL
-    );
-    CREATE TABLE IF NOT EXISTS imported_files (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      original_name TEXT NOT NULL,
-      mime_type TEXT NOT NULL,
-      size INTEGER NOT NULL,
-      uploaded_at TEXT NOT NULL,
-      content BLOB NOT NULL
-    );
-    CREATE TABLE IF NOT EXISTS sheet_slots (
-      usn TEXT PRIMARY KEY,
-      row_number INTEGER NOT NULL
-    );
-    CREATE INDEX IF NOT EXISTS students_usn_idx ON students(usn COLLATE NOCASE);
-    CREATE INDEX IF NOT EXISTS students_batch_idx ON students(batch);
-  `);
-    // Ensure legacy column exists for backward compatibility
-    const cols = await (await db.prepare('PRAGMA table_info(students)')).all();
-    if (!cols.some(c => c.name === 'sheet_previous_usn')) {
-      await db.exec("ALTER TABLE students ADD COLUMN sheet_previous_usn TEXT NOT NULL DEFAULT ''");
-    }
-  } catch (err) {
-    console.warn('Database initialization note:', err.message);
+let dbReadyPromise = null;
+function ensureDbReady() {
+  if (!dbReadyPromise) {
+    dbReadyPromise = (async () => {
+      try {
+        await db.exec(`
+          PRAGMA foreign_keys = ON;
+          CREATE TABLE IF NOT EXISTS students (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            usn TEXT NOT NULL UNIQUE,
+            dob TEXT NOT NULL,
+            questions_senior TEXT NOT NULL DEFAULT '',
+            advice_junior TEXT NOT NULL DEFAULT '',
+            batch TEXT NOT NULL,
+            semester INTEGER NOT NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            sheet_sync TEXT NOT NULL DEFAULT 'pending',
+            sheet_previous_usn TEXT NOT NULL DEFAULT '',
+            sheet_row INTEGER
+          );
+          CREATE TABLE IF NOT EXISTS admin_sessions (
+            token_hash TEXT PRIMARY KEY,
+            email TEXT NOT NULL,
+            expires_at INTEGER NOT NULL
+          );
+          CREATE TABLE IF NOT EXISTS imported_files (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            original_name TEXT NOT NULL,
+            mime_type TEXT NOT NULL,
+            size INTEGER NOT NULL,
+            uploaded_at TEXT NOT NULL,
+            content BLOB NOT NULL
+          );
+          CREATE TABLE IF NOT EXISTS sheet_slots (
+            usn TEXT PRIMARY KEY,
+            row_number INTEGER NOT NULL
+          );
+          CREATE INDEX IF NOT EXISTS students_usn_idx ON students(usn COLLATE NOCASE);
+          CREATE INDEX IF NOT EXISTS students_batch_idx ON students(batch);
+        `);
+        const cols = await (await db.prepare('PRAGMA table_info(students)')).all();
+        if (!cols.some(c => c.name === 'sheet_previous_usn')) {
+          await db.exec("ALTER TABLE students ADD COLUMN sheet_previous_usn TEXT NOT NULL DEFAULT ''");
+        }
+      } catch (err) {
+        console.warn('Database initialization note:', err.message);
+      }
+    })();
   }
-})();
+  return dbReadyPromise;
+}
+
+ensureDbReady();
 
 const app = express();
+app.use(async (_req, _res, next) => {
+  await ensureDbReady();
+  next();
+});
 app.disable('x-powered-by');
 app.use((req, res, next) => {
   res.setHeader('X-Content-Type-Options', 'nosniff');
@@ -568,4 +578,8 @@ app.use((error, _req, res, _next) => {
   res.status(500).json({ error: 'Unexpected server error.' });
 });
 
-app.listen(port, host, () => console.log(`INUGURATION API listening on http://${host}:${port}`));
+if (!process.env.VERCEL) {
+  app.listen(port, host, () => console.log(`INUGURATION API listening on http://${host}:${port}`));
+}
+
+export default app;

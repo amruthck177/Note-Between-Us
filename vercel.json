@@ -1,28 +1,13 @@
 {
-  "builds": [
+  "version": 2,
+  "rewrites": [
     {
-      "src": "server/index.js",
-      "use": "@vercel/node",
-      "config": { "maxDuration": 30 }
+      "source": "/api/(.*)",
+      "destination": "/api"
     },
     {
-      "src": "package.json",
-      "use": "@vercel/static-build",
-      "config": { "distDir": "dist" }
+      "source": "/((?!api/).*)",
+      "destination": "/index.html"
     }
-  ],
-  "env": {
-    "ADMIN_EMAIL": "admin@inuguration.local",
-    "ADMIN_PASSWORD": "inuaguration123",
-    "GOOGLE_SHEET_ID": "1qmC2UCeR_bFcLc9rsLpneTaEKR7ym4c1nKWHVulw2XQ",
-    "TURSO_DATABASE_URL": "libsql://notes-between-us-db-amruthck.aws-ap-south-1.turso.io",
-    "TURSO_AUTH_TOKEN": "eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJhIjoicnciLCJleHAiOjE4MDAyNzY2MjIsImlhdCI6MTc5NTA5MjYyMiwiaWQiOiIwMWExZjNkYi02ZDAxLTc4NjgtOTNiZS1lMWE4M2E3MjVmNmIiLCJraWQiOiItcVQ1Q05BT2ZnNTYtR2tsWllYOWVDRGZiMUZpczAxaGlJUkNsUlVMUkRzIiwicmlkIjoiYWMyYzc5ODAtMjE5ZS00OTY3LTk3ODEtN2E2Mjk2YzU4N2Q5In0.7Y9xUFHbvvYUMpvYZ9BacW5zVml-Rs-5LLS8QXstd4cdkWTJ3hcv2FC_h9l-N3_hwakrgvQCs3xOGvdVMTamCg",
-    "APP_ORIGIN": "https://notes-between-us.vercel.app"
-  },
-  "routes": [
-    { "src": "/api/(.*)", "dest": "/server/index.js" },
-    { "src": "/admin/(.*)", "dest": "/server/index.js" },
-    { "src": "^/$", "dest": "/dist/index.html" },
-    { "src": "/(.*)", "dest": "/dist/$1" }
   ]
 }
