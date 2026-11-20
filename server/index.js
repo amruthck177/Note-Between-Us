@@ -121,23 +121,30 @@ function parseCookie(req, name) {
   return entry ? decodeURIComponent(entry.slice(name.length + 1)) : '';
 }
 
+const inMemoryAdminSessions = new Map();
+
 async function requireAdmin(req, res, next) {
   const token = parseCookie(req, 'inuguration_admin');
   if (!token) return res.status(401).json({ error: 'Admin sign-in required.' });
-  const session = await (await db.prepare('SELECT email, expires_at FROM admin_sessions WHERE token_hash = ?')).get(tokenDigest(token));
-  if (!session || session.expires_at < Date.now()) {
-    if (token) await db.prepare('DELETE FROM admin_sessions WHERE token_hash = ?').run(tokenDigest(token));
-    return res.status(401).json({ error: 'Admin session expired.' });
+  const hash = tokenDigest(token);
+  const memSession = inMemoryAdminSessions.get(hash);
+  if (memSession && memSession.expiresAt >= Date.now()) {
+    req.admin = { email: memSession.email };
+    return next();
   }
-  req.admin = { email: session.email };
-  next();
+  try {
+    const session = await (await db.prepare('SELECT email, expires_at FROM admin_sessions WHERE token_hash = ?')).get(hash);
+    if (session && Number(session.expires_at) >= Date.now()) {
+      req.admin = { email: session.email };
+      return next();
+    }
+  } catch (err) {
+    console.warn('Session DB check warning:', err.message);
+  }
+  return res.status(401).json({ error: 'Admin session expired or invalid.' });
 }
 
-function sameOrigin(req, res, next) { /* disabled origin check */ next(); }
-  const origin = req.get('origin');
-  if (!origin) return next();
-  const allowed = new Set([process.env.APP_ORIGIN, 'http://localhost:5173', 'http://127.0.0.1:5173'].filter(Boolean));
-  if (!allowed.has(origin)) return res.status(403).json({ error: 'Request origin rejected.' });
+function sameOrigin(req, res, next) {
   next();
 }
 
@@ -170,66 +177,45 @@ app.post('/api/submissions', submissionLimiter, async (req, res) => {
   }
 });
 
-<<<<<<< HEAD
-function hashConfig() {
-  const parts = String(process.env.ADMIN_PASSWORD_HASH || '').split(':');
-  return parts.length === 2 && /^[a-f0-9]{64}$/.test(parts[1]) ? { salt: parts[0], hash: Buffer.from(parts[1], 'hex') } : null;
-}
-function verifyPassword(password) {
-  // If a plain‑text admin password is provided via the ADMIN_PASSWORD env var, use it directly.
-  // This is convenient for local development or simple deployments, but it is less secure than the hash.
-  const plain = process.env.ADMIN_PASSWORD;
-  if (plain) {
-    return password === plain;
-  }
-  // Fall back to the existing salted scrypt hash validation.
-  const config = hashConfig();
-  if (!config || !password) return false;
-  const computed = scryptSync(password, config.salt, config.hash.length);
-  return timingSafeEqual(computed, config.hash);
-}
-=======
 const HARDCODED_ADMIN_EMAIL = 'admin@yit';
 const HARDCODED_ADMIN_PASSWORD = '123@231';
->>>>>>> a3c0b52 (sj easter egg and admin password hardcode)
 
-app.post('/api/admin/session', loginLimiter, (req, res) => {
-  const email = cleanText(req.body?.email, 254).toLowerCase();
-  const password = String(req.body?.password || '');
-<<<<<<< HEAD
-  // Use hard‑coded credentials if environment variables are not set
-  const expectedEmail = process.env.ADMIN_EMAIL ? String(process.env.ADMIN_EMAIL).toLowerCase() : HARD_CODED_ADMIN_EMAIL.toLowerCase();
-  const plainPassword = process.env.ADMIN_PASSWORD || HARD_CODED_ADMIN_PASSWORD;
-  const passwordOk = plainPassword ? password === plainPassword : verifyPassword(password);
-  if (!expectedEmail || email !== expectedEmail || !passwordOk) {
-    return res.status(401).json({ error: 'Email or password is incorrect.' });
+app.post('/api/admin/session', loginLimiter, async (req, res) => {
+  try {
+    const email = cleanText(req.body?.email, 254).toLowerCase();
+    const password = String(req.body?.password || '');
+    const expectedEmail = String(process.env.ADMIN_EMAIL || HARDCODED_ADMIN_EMAIL).toLowerCase();
+    const expectedPassword = String(process.env.ADMIN_PASSWORD || HARDCODED_ADMIN_PASSWORD);
+
+    if (!email || !password || email !== expectedEmail || password !== expectedPassword) {
+      return res.status(401).json({ error: 'Email or password is incorrect.' });
+    }
+    const token = randomBytes(32).toString('base64url');
+    const expiresAt = Date.now() + 8 * 60 * 60 * 1000;
+    const hash = tokenDigest(token);
+    inMemoryAdminSessions.set(hash, { email: expectedEmail, expiresAt });
+    try {
+      await db.prepare('INSERT INTO admin_sessions (token_hash, email, expires_at) VALUES (?, ?, ?)').run(hash, expectedEmail, expiresAt);
+    } catch (dbErr) {
+      console.warn('Session DB warning:', dbErr.message);
+    }
+    res.cookie('inuguration_admin', token, { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'strict', maxAge: 8 * 60 * 60 * 1000, path: '/' });
+    res.json({ ok: true, email: expectedEmail, expiresAt });
+  } catch (err) {
+    console.error('Login error:', err);
+    res.status(500).json({ error: 'Login could not be completed.' });
   }
-  const token = randomBytes(32).toString('base64url');
-  const expiresAt = Date.now() + 8 * 60 * 60 * 1000;
-  db.prepare('INSERT INTO admin_sessions (token_hash, email, expires_at) VALUES (?, ?, ?)').run(tokenDigest(token), expectedEmail, expiresAt);
-  res.cookie('inuguration_admin', token, { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'strict', maxAge: 8 * 60 * 60 * 1000, path: '/' });
-  res.json({ ok: true, email: expectedEmail, expiresAt });
-});
-  const email = cleanText(req.body?.email, 254).toLowerCase();
-  const expectedEmail = String(process.env.ADMIN_EMAIL || '').toLowerCase();
-  if (!expectedEmail || !hashConfig() || email !== expectedEmail || !verifyPassword(String(req.body?.password || '')))
-=======
-  const expectedEmail = String(process.env.ADMIN_EMAIL || HARDCODED_ADMIN_EMAIL).toLowerCase();
-  const expectedPassword = String(process.env.ADMIN_PASSWORD || HARDCODED_ADMIN_PASSWORD);
-
-  if (!email || !password || email !== expectedEmail || password !== expectedPassword)
->>>>>>> a3c0b52 (sj easter egg and admin password hardcode)
-    return res.status(401).json({ error: 'Email or password is incorrect.' });
-  const token = randomBytes(32).toString('base64url');
-  const expiresAt = Date.now() + 8 * 60 * 60 * 1000;
-  db.prepare('INSERT INTO admin_sessions (token_hash, email, expires_at) VALUES (?, ?, ?)').run(tokenDigest(token), expectedEmail, expiresAt);
-  res.cookie('inuguration_admin', token, { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'strict', maxAge: 8 * 60 * 60 * 1000, path: '/' });
-  res.json({ ok: true, email: expectedEmail, expiresAt });
 });
 app.get('/api/admin/session', requireAdmin, (req, res) => res.json({ authenticated: true, email: req.admin.email }));
-app.delete('/api/admin/session', requireAdmin, (req, res) => {
+app.delete('/api/admin/session', requireAdmin, async (req, res) => {
   const token = parseCookie(req, 'inuguration_admin');
-  db.prepare('DELETE FROM admin_sessions WHERE token_hash = ?').run(tokenDigest(token));
+  if (token) {
+    const hash = tokenDigest(token);
+    inMemoryAdminSessions.delete(hash);
+    try {
+      await db.prepare('DELETE FROM admin_sessions WHERE token_hash = ?').run(hash);
+    } catch {}
+  }
   res.clearCookie('inuguration_admin', { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'strict', path: '/' });
   res.json({ ok: true });
 });
