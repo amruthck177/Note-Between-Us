@@ -27,7 +27,7 @@ test('1. Database has exactly 24 unique, valid profiles', () => {
 
 test('2. Verify all 24 profiles trigger on full name and half name / aliases', () => {
   const expected = [
-    { id: 'mohammed-rihan-mr', fullName: 'MOHAMMED RIHAN MR', aliases: ['MOHAMMED RIHAN MR', 'RIHAN MR'] },
+    { id: 'mohammad-rihan-mr', fullName: 'MOHAMMAD RIHAN MR', aliases: ['MOHAMMAD RIHAN MR', 'RIHAN MR'] },
     { id: 'mohammed-adnan', fullName: 'MOHAMMED ADNAN', aliases: ['MOHAMMED ADNAN', 'ADNAN'] },
     { id: 'mohammed-shajith', fullName: 'MOHAMMED SHAJITH', aliases: ['MOHAMMED SHAJITH', 'SHAJITH'] },
     { id: 'hassan-shaheer', fullName: 'HASSAN SHAHEER', aliases: ['HASSAN SHAHEER', 'HASSAN'] },
